@@ -1,5 +1,6 @@
 import numba
 import numpy as np
+from tifffile import imsave
 from . import watershed, findmax
 from scipy.ndimage import label, distance_transform_edt
 from skimage.measure import regionprops
@@ -120,3 +121,41 @@ def ipy_watershed(img, tol):
     img[line==0] = 0
     return img
 
+def process_bf(r, img, region_mask, current_img_name, zf_params, seg_suffix="_SegAnalysis"):
+    res_dir = r + seg_suffix
+    if not os.path.exists(res_dir):
+        os.mkdir(res_dir)
+    integrated, cur_mask, tmp_zf_params = segment(img, region_mask, zf_params)
+    zf_params.update(tmp_zf_params)
+    integrated = integrated.astype(np.int32)
+    img_prefix = res_dir+ os.sep + current_img_name
+    imsave(img_prefix + "_integrated.tif", integrated)
+    print("%s: integrated image saved!" % current_img_name)
+
+    cur_mask = cur_mask.astype(np.uint8) * 255
+    imsave(img_prefix + "_raw_mask.tif", cur_mask)
+    print("%s: mask image saved!" % current_img_name)
+
+    label_img, n = label(cur_mask, output=np.uint16)
+    imsave(img_prefix + "_label.tif", label_img)
+    print("%s: label image saved! %i rois detected" %(current_img_name, n))
+
+    label_img, n = label(255-cur_mask, output=np.uint16)
+    cell_only_idx = (np.ones(n+1)*255).astype(np.uint8)
+    pieces_only_idx = (np.ones(n+1)*255).astype(np.uint8)
+    cell_only_idx[0] = 0
+    pieces_only_idx[0] = 0
+    res_features = regionprops(label_img, integrated)
+    for p in res_features:
+        if p.area < 500:
+            cell_only_idx[p.label] = 0
+        else:
+            pieces_only_idx[p.label] = 0
+    cells = cell_only_idx[label_img]
+    imsave(img_prefix + "_clean.tif", cells)
+    print("%s: cleaned mask image saved!" % current_img_name)
+    imsave(img_prefix + "_rejected.tif", pieces_only_idx[label_img])
+    print("%s: small pieces image saved!" % current_img_name)
+    watersheded_cells = ipy_watershed((255-cells).copy(), 5)
+    imsave(img_prefix + "_clean_watersheded.tif", watersheded_cells)
+    print("%s: cleaned and watershed image saved!" % current_img_name)

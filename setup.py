@@ -10,16 +10,16 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 
 setup(
         name='bfseg',
-        version='0.0.1',
+        version='0.0.2',
         description='a segmentation algorithm to find cell borders in bright-field images',
         long_description=long_description,
         long_description_content_type='text/markdown',
-        author='Tong LI'
+        author='Tong LI',
         author_email='tongli.bioinfo@gmail.com',
         classifiers=[
             'Development Status :: 3 - Alpha',
             'Intended Audience :: Developers',
-            'Topic :: segmentation :: Microscope',
+            #'Topic :: segmentation :: Microscope',
             'Programming Language :: Python :: 3',
             'Programming Language :: Python :: 3.4',
             'Programming Language :: Python :: 3.5',
