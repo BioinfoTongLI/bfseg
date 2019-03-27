@@ -159,3 +159,10 @@ def process_bf(r, img, region_mask, current_img_name, zf_params, seg_suffix="_Se
     watersheded_cells = ipy_watershed((255-cells).copy(), 5)
     imsave(img_prefix + "_clean_watersheded.tif", watersheded_cells)
     print("%s: cleaned and watershed image saved!" % current_img_name)
+
+def easy_run(root, M=4,N=4,h=2160, w=2560, zf_params={}):
+    region_mask = get_chunk_mask(h, w, M, N)
+    for r, imgs in get_master_fhs(root, "BF"):
+        for img in imgs.series:
+            process_bf(r, img.asarray(), region_mask,\
+                       img[0].tags["MicroManagerMetadata"].value["FileName"][:-8], zf_params)
