@@ -13,7 +13,7 @@ import os
 def find_focus(chunk):
     d, h, w = chunk.shape
     min_var = np.inf
-    min_ind = int(d/2)
+    min_ind = int(d / 2)
     for i in range(d):
         tmp_v = np.std(chunk[i, :, :])
         if tmp_v < min_var:
@@ -24,16 +24,15 @@ def find_focus(chunk):
 
 @numba.jit(nopython=True, parallel=True)
 def get_chunk_mask(h, w, M, N):
-    if h%M !=0 or w%N !=0:
+    if h % M != 0 or w % N != 0:
         print("image can not be evenly divided")
-    ch_h, ch_w = int(h/M), int(w/N)
+    ch_h, ch_w = int(h / M), int(w / N)
     mask = np.array([1] * h * w).reshape(h, w)
     labels = list(range(M * N))
     count = 0
     for i in range(M):
         for j in range(N):
-            mask[i*ch_h : (i+1) * ch_h,
-                 j*ch_w : (j+1) * ch_w] = labels[count]
+            mask[i * ch_h : (i + 1) * ch_h, j * ch_w : (j + 1) * ch_w] = labels[count]
             count += 1
     return mask
 
@@ -45,7 +44,7 @@ def get_focus_grid(img, mask):
     focus_img = mask.copy()
     for ind in range(n_chunk + 1):
         min_var = np.inf
-        min_ind = int(d/2)
+        min_ind = int(d / 2)
         cur_mask = mask == ind
         for i in range(d):
             # boolean slicing is not supported yet... so go python mode
@@ -58,22 +57,43 @@ def get_focus_grid(img, mask):
 
 
 @numba.jit(nopython=True, parallel=True)
-def preCalculateParameters(first_ind=0, last_ind=33, N=101, direction=-1, zf=17,
-        sigma=8.0):
+def preCalculateParameters(
+    first_ind=0, last_ind=33, N=101, direction=-1, zf=17, sigma=8.0
+):
     h = (last_ind - first_ind) / N
     zs_d = np.array([first_ind + h * i for i in range(N)])
     zs_i = [int(i) for i in zs_d]
-    return h, zs_i, [direction * (zs_d[i] - zf) * np.exp(-(zf - zs_d[i]) ** 2 / (2 * (sigma ** 2))) for i in range(N)]
+    return (
+        h,
+        zs_i,
+        [
+            direction
+            * (zs_d[i] - zf)
+            * np.exp(-(zf - zs_d[i]) ** 2 / (2 * (sigma ** 2)))
+            for i in range(N)
+        ],
+    )
 
 
 @numba.jit(nopython=True, parallel=True)
 def integrate(z_pile, h, zs_i, smooth_ponderation, first_ind=0, last_ind=33, N=101):
-    total = z_pile[zs_i[first_ind]] * smooth_ponderation[first_ind] + z_pile[zs_i[N - 1]] * smooth_ponderation[N - 1]
+    total = (
+        z_pile[zs_i[first_ind]] * smooth_ponderation[first_ind]
+        + z_pile[zs_i[N - 1]] * smooth_ponderation[N - 1]
+    )
     for i in range(1, N, 2):
-        total += 4.0 * z_pile[zs_i[first_ind + int(i)]] * smooth_ponderation[first_ind + int(i)]
-    for i in range(2, N-1, 2):
-        total += 2.0 * z_pile[zs_i[first_ind + int(i)]] * smooth_ponderation[first_ind + int(i)]
-    return total * h / 3.0;
+        total += (
+            4.0
+            * z_pile[zs_i[first_ind + int(i)]]
+            * smooth_ponderation[first_ind + int(i)]
+        )
+    for i in range(2, N - 1, 2):
+        total += (
+            2.0
+            * z_pile[zs_i[first_ind + int(i)]]
+            * smooth_ponderation[first_ind + int(i)]
+        )
+    return total * h / 3.0
 
 
 @numba.jit(nopython=True, parallel=True)
@@ -82,8 +102,9 @@ def compute(img, integrated, zf, focus_img, h, zs_i, smoothed_ponderation):
     for x in range(height):
         for y in range(width):
             if focus_img[x, y] == zf:
-                integrated[x, y] = integrate(img[:, x, y], h, zs_i,
-                        smoothed_ponderation, last_ind=depth)
+                integrated[x, y] = integrate(
+                    img[:, x, y], h, zs_i, smoothed_ponderation, last_ind=depth
+                )
 
 
 @numba.jit(parallel=True)
@@ -103,8 +124,12 @@ def segment(bf_stack, region_mask, zf_params):
 def get_master_fhs(root, pref):
     for r, ds, fs in os.walk(root):
         for f in fs:
-            if f.endswith(".tif") and f.startswith(pref) and\
-                not f.startswith(pref + "_end") and not f.endswith("_1.ome.tif"):
+            if (
+                f.endswith(".tif")
+                and f.startswith(pref)
+                and not f.startswith(pref + "_end")
+                and not f.endswith("_1.ome.tif")
+            ):
                 img_path = r + os.sep + f
                 with TiffFile(img_path) as imgs:
                     if len(imgs.series) > 1:
@@ -115,20 +140,23 @@ def ipy_watershed(img, tol):
     dist = -distance_transform_edt(img)
     pts = findmax.find_maximum(dist, tol, False)
     buf = np.zeros(img.shape, dtype=np.uint16)
-    buf[pts[:,0], pts[:,1]] = 1
-    markers, n = label(buf, np.ones((3,3)))
-    line = watershed.watershed(dist, markers, line=True, conn=False+1)
-    img[line==0] = 0
+    buf[pts[:, 0], pts[:, 1]] = 1
+    markers, n = label(buf, np.ones((3, 3)))
+    line = watershed.watershed(dist, markers, line=True, conn=False + 1)
+    img[line == 0] = 0
     return img
 
-def process_bf(r, img, region_mask, current_img_name, zf_params, seg_suffix="_SegAnalysis"):
+
+def process_bf(
+    r, img, region_mask, current_img_name, zf_params, seg_suffix="_SegAnalysis"
+):
     res_dir = r + seg_suffix
     if not os.path.exists(res_dir):
         os.mkdir(res_dir)
     integrated, cur_mask, tmp_zf_params = segment(img, region_mask, zf_params)
     zf_params.update(tmp_zf_params)
     integrated = integrated.astype(np.int32)
-    img_prefix = res_dir+ os.sep + current_img_name
+    img_prefix = res_dir + os.sep + current_img_name
     imsave(img_prefix + "_integrated.tif", integrated)
     print("%s: integrated image saved!" % current_img_name)
 
@@ -138,11 +166,11 @@ def process_bf(r, img, region_mask, current_img_name, zf_params, seg_suffix="_Se
 
     label_img, n = label(cur_mask, output=np.uint16)
     imsave(img_prefix + "_label.tif", label_img)
-    print("%s: label image saved! %i rois detected" %(current_img_name, n))
+    print("%s: label image saved! %i rois detected" % (current_img_name, n))
 
-    label_img, n = label(255-cur_mask, output=np.uint16)
-    cell_only_idx = (np.ones(n+1)*255).astype(np.uint8)
-    pieces_only_idx = (np.ones(n+1)*255).astype(np.uint8)
+    label_img, n = label(255 - cur_mask, output=np.uint16)
+    cell_only_idx = (np.ones(n + 1) * 255).astype(np.uint8)
+    pieces_only_idx = (np.ones(n + 1) * 255).astype(np.uint8)
     cell_only_idx[0] = 0
     pieces_only_idx[0] = 0
     res_features = regionprops(label_img, integrated)
@@ -156,13 +184,19 @@ def process_bf(r, img, region_mask, current_img_name, zf_params, seg_suffix="_Se
     print("%s: cleaned mask image saved!" % current_img_name)
     imsave(img_prefix + "_rejected.tif", pieces_only_idx[label_img])
     print("%s: small pieces image saved!" % current_img_name)
-    watersheded_cells = ipy_watershed((255-cells).copy(), 5)
+    watersheded_cells = ipy_watershed((255 - cells).copy(), 5)
     imsave(img_prefix + "_clean_watersheded.tif", watersheded_cells)
     print("%s: cleaned and watershed image saved!" % current_img_name)
 
-def easy_run(root, M=4,N=4,h=2160, w=2560, zf_params={}):
+
+def easy_run(root, M=4, N=4, h=2160, w=2560, zf_params={}):
     region_mask = get_chunk_mask(h, w, M, N)
     for r, imgs in get_master_fhs(root, "BF"):
         for img in imgs.series:
-            process_bf(r, img.asarray(), region_mask,\
-                       img[0].tags["MicroManagerMetadata"].value["FileName"][:-8], zf_params)
+            process_bf(
+                r,
+                img.asarray(),
+                region_mask,
+                img[0].tags["MicroManagerMetadata"].value["FileName"][:-8],
+                zf_params,
+            )
