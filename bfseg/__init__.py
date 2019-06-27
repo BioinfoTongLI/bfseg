@@ -1,11 +1,14 @@
 import numba
 import numpy as np
-from tifffile import imsave
+from tifffile import imsave, imshow
 from . import watershed, findmax
 from scipy.ndimage import label, distance_transform_edt
 from skimage.measure import regionprops
+# from skimage.feature import peak_local_max
+# from skimage.morphology import watershed
 from tifffile.tifffile import TiffFile
 from skimage.filters import threshold_otsu
+import matplotlib.pyplot as plt
 import os
 
 
@@ -147,6 +150,14 @@ def ipy_watershed(img, tol):
     return img
 
 
+def skimage_watershed(img):
+    # Generate the markers as local maxima of the distance to the background
+    distance = distance_transform_edt(img)
+    local_maxi = peak_local_max(distance, indices=False, footprint=np.ones((3, 3)),
+                                labels=img)
+    markers = label(local_maxi)[0]
+    return watershed(-distance, markers, mask=img, watershed_line=True)
+
 def process_bf(
     r, img, region_mask, current_img_name, zf_params, seg_suffix="_SegAnalysis"
 ):
@@ -184,7 +195,10 @@ def process_bf(
     print("%s: cleaned mask image saved!" % current_img_name)
     imsave(img_prefix + "_rejected.tif", pieces_only_idx[label_img])
     print("%s: small pieces image saved!" % current_img_name)
+    # watersheded_cells = skimage_watershed(255 - cells)
     watersheded_cells = ipy_watershed((255 - cells).copy(), 5)
+    imshow(watersheded_cells)
+    plt.show()
     imsave(img_prefix + "_clean_watersheded.tif", watersheded_cells)
     print("%s: cleaned and watershed image saved!" % current_img_name)
 
