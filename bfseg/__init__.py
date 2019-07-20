@@ -1,4 +1,4 @@
-import numba
+from numba import jit
 import numpy as np
 from tifffile import imsave, imshow
 from . import watershed, findmax
@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import os
 
 
-@numba.jit(nopython=True, parallel=True)
+@jit(nopython=True, parallel=True)
 def find_focus(chunk):
     d, h, w = chunk.shape
     min_var = np.inf
@@ -25,7 +25,7 @@ def find_focus(chunk):
     return min_ind
 
 
-@numba.jit(nopython=True, parallel=True)
+@jit(nopython=True, parallel=True)
 def get_chunk_mask(h, w, M, N):
     if h % M != 0 or w % N != 0:
         print("image can not be evenly divided")
@@ -40,7 +40,7 @@ def get_chunk_mask(h, w, M, N):
     return mask
 
 
-@numba.jit(nopython=False, parallel=True)
+@jit(nopython=False, forceobj=True, parallel=True)
 def get_focus_grid(img, mask):
     d, h, w = img.shape
     n_chunk = mask.max()
@@ -59,7 +59,7 @@ def get_focus_grid(img, mask):
     return focus_img
 
 
-@numba.jit(nopython=True, parallel=True)
+@jit(nopython=True, parallel=True)
 def preCalculateParameters(
     first_ind=0, last_ind=33, N=101, direction=-1, zf=17, sigma=8.0
 ):
@@ -78,7 +78,7 @@ def preCalculateParameters(
     )
 
 
-@numba.jit(nopython=True, parallel=True)
+@jit(nopython=True)
 def integrate(z_pile, h, zs_i, smooth_ponderation, first_ind=0, last_ind=33, N=101):
     total = (
         z_pile[zs_i[first_ind]] * smooth_ponderation[first_ind]
@@ -99,7 +99,7 @@ def integrate(z_pile, h, zs_i, smooth_ponderation, first_ind=0, last_ind=33, N=1
     return total * h / 3.0
 
 
-@numba.jit(nopython=True, parallel=True)
+@jit(nopython=True)
 def compute(img, integrated, zf, focus_img, h, zs_i, smoothed_ponderation):
     depth, height, width = img.shape
     for x in range(height):
@@ -110,7 +110,6 @@ def compute(img, integrated, zf, focus_img, h, zs_i, smoothed_ponderation):
                 )
 
 
-@numba.jit(parallel=True)
 def segment(bf_stack, region_mask, zf_params):
     focus_img = get_focus_grid(bf_stack, region_mask)
     h, w = focus_img.shape

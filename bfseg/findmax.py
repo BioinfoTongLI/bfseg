@@ -46,7 +46,7 @@ def fill(img, msk, p, nbs, buf):
         cur += 1
 
 
-@jit  # my mark
+@jit(forceobj=True)  # my mark
 def mark(img, msk, buf, mode):  # mark the array use (0, 1, 2)
     nbs = neighbors(img.shape)
     idx = np.zeros(msk.size // 3, dtype=np.int64)
@@ -79,7 +79,7 @@ def mark(img, msk, buf, mode):  # mark the array use (0, 1, 2)
     return idx[:s].copy()
 
 
-@jit  # 3 max 2 zmd b4 ptd
+@jit(nopython=False, forceobj=True)  # 3 max 2 zmd b4 ptd
 def filter(img, msk, idx, bur, tor, mode):
     nbs = neighbors(img.shape)
     acc = np.cumprod((1,) + img.shape[::-1][:-1])[::-1]
