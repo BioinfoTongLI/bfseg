@@ -4,6 +4,7 @@ from tifffile import imsave, imshow
 from . import watershed, findmax
 from scipy.ndimage import label, distance_transform_edt
 from skimage.measure import regionprops
+
 # from skimage.feature import peak_local_max
 # from skimage.morphology import watershed
 from tifffile.tifffile import TiffFile
@@ -152,13 +153,21 @@ def ipy_watershed(img, tol):
 def skimage_watershed(img):
     # Generate the markers as local maxima of the distance to the background
     distance = distance_transform_edt(img)
-    local_maxi = peak_local_max(distance, indices=False, footprint=np.ones((3, 3)),
-                                labels=img)
+    local_maxi = peak_local_max(
+        distance, indices=False, footprint=np.ones((3, 3)), labels=img
+    )
     markers = label(local_maxi)[0]
     return watershed(-distance, markers, mask=img, watershed_line=True)
 
+
 def process_bf(
-    r, img, region_mask, current_img_name, zf_params, seg_suffix="_SegAnalysis"
+    r,
+    img,
+    region_mask,
+    current_img_name,
+    zf_params,
+    show_img,
+    seg_suffix="_SegAnalysis",
 ):
     res_dir = r + seg_suffix
     if not os.path.exists(res_dir):
@@ -196,13 +205,14 @@ def process_bf(
     print("%s: small pieces image saved!" % current_img_name)
     # watersheded_cells = skimage_watershed(255 - cells)
     watersheded_cells = ipy_watershed((255 - cells).copy(), 5)
-    imshow(watersheded_cells)
-    plt.show()
+    if show_img:
+        imshow(watersheded_cells)
+        plt.show()
     imsave(img_prefix + "_clean_watersheded.tif", watersheded_cells)
     print("%s: cleaned and watershed image saved!" % current_img_name)
 
 
-def easy_run(root, M=4, N=4, h=2160, w=2560, zf_params={}):
+def easy_run(root, M=4, N=4, h=2160, w=2560, show_img=False, zf_params={}):
     region_mask = get_chunk_mask(h, w, M, N)
     for r, imgs in get_master_fhs(root, "BF"):
         for img in imgs.series:
@@ -212,4 +222,5 @@ def easy_run(root, M=4, N=4, h=2160, w=2560, zf_params={}):
                 region_mask,
                 img[0].tags["MicroManagerMetadata"].value["FileName"][:-8],
                 zf_params,
+                show_img,
             )
