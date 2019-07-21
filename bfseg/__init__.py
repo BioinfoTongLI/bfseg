@@ -8,7 +8,6 @@ from skimage.measure import regionprops
 # from skimage.morphology import watershed
 from tifffile.tifffile import TiffFile
 from skimage.filters import threshold_otsu
-from pathlib2 import Path
 import matplotlib.pyplot as plt
 import os
 
@@ -124,26 +123,19 @@ def segment(bf_stack, region_mask, zf_params):
     return integrated, integrated <= th_otsu, zf_params
 
 
-# def get_master_fhs(root, pref):
-    # for r, ds, fs in os.walk(root):
-        # for f in fs:
-            # if (
-                # f.endswith(".tif")
-                # and f.startswith(pref)
-                # and not f.startswith(pref + "_end")
-                # and not f.endswith("_1.ome.tif")
-            # ):
-                # img_path = r + os.sep + f
-                # with TiffFile(img_path) as imgs:
-                    # if len(imgs.series) > 1:
-                        # yield r, imgs
-
-
 def get_master_fhs(root, pref):
-    for p in Path(root).glob(pref):
-        with TiffFile(str(p)) as imgs:
-            if len(imgs.series) > 1:
-                yield p.parent, imgs
+    for r, ds, fs in os.walk(root):
+        for f in fs:
+            if (
+                f.endswith(".tif")
+                and f.startswith(pref)
+                and not f.startswith(pref + "_end")
+                and not f.endswith("_1.ome.tif")
+            ):
+                img_path = r + os.sep + f
+                with TiffFile(img_path) as imgs:
+                    if len(imgs.series) > 1:
+                        yield r, imgs
 
 
 def ipy_watershed(img, tol):
@@ -168,25 +160,22 @@ def skimage_watershed(img):
 def process_bf(
     r, img, region_mask, current_img_name, zf_params, seg_suffix="_SegAnalysis"
 ):
-    res_dir = Path(str(r.absolute()) + seg_suffix)
-    if not res_dir.exists():
-        res_dir.mkdir()
+    res_dir = r + seg_suffix
+    if not os.path.exists(res_dir):
+        os.mkdir(res_dir)
     integrated, cur_mask, tmp_zf_params = segment(img, region_mask, zf_params)
     zf_params.update(tmp_zf_params)
     integrated = integrated.astype(np.int32)
-    img_prefix = res_dir.joinpath(current_img_name)
-    imsave(str(img_prefix.with_name(
-        img_prefix.name + "_integrated.tif")), integrated)
+    img_prefix = res_dir + os.sep + current_img_name
+    imsave(img_prefix + "_integrated.tif", integrated)
     print("%s: integrated image saved!" % current_img_name)
 
     cur_mask = cur_mask.astype(np.uint8) * 255
-    imsave(str(img_prefix.with_name(
-        img_prefix.name + "_raw_mask.tif")), cur_mask)
+    imsave(img_prefix + "_raw_mask.tif", cur_mask)
     print("%s: mask image saved!" % current_img_name)
 
     label_img, n = label(cur_mask, output=np.uint16)
-    imsave(str(img_prefix.with_name(
-        img_prefix.name + "_label.tif")), label_img)
+    imsave(img_prefix + "_label.tif", label_img)
     print("%s: label image saved! %i rois detected" % (current_img_name, n))
 
     label_img, n = label(255 - cur_mask, output=np.uint16)
@@ -201,25 +190,21 @@ def process_bf(
         else:
             pieces_only_idx[p.label] = 0
     cells = cell_only_idx[label_img]
-    imsave(str(img_prefix.with_name(
-        img_prefix.name + "_clean.tif")), cells)
+    imsave(img_prefix + "_clean.tif", cells)
     print("%s: cleaned mask image saved!" % current_img_name)
-    imsave(str(img_prefix.with_name(
-        img_prefix.name + "_rejected.tif")), pieces_only_idx[label_img])
+    imsave(img_prefix + "_rejected.tif", pieces_only_idx[label_img])
     print("%s: small pieces image saved!" % current_img_name)
     # watersheded_cells = skimage_watershed(255 - cells)
     watersheded_cells = ipy_watershed((255 - cells).copy(), 5)
     imshow(watersheded_cells)
     plt.show()
-    imsave(str(img_prefix.with_name(
-        img_prefix.name + "_clean_watersheded.tif")), watersheded_cells)
+    imsave(img_prefix + "_clean_watersheded.tif", watersheded_cells)
     print("%s: cleaned and watershed image saved!" % current_img_name)
 
 
 def easy_run(root, M=4, N=4, h=2160, w=2560, zf_params={}):
     region_mask = get_chunk_mask(h, w, M, N)
-    for r, imgs in get_master_fhs(root,
-            "*/BF_*_MMStack_*.ome.tif"):
+    for r, imgs in get_master_fhs(root, "BF"):
         for img in imgs.series:
             process_bf(
                 r,
